@@ -183,12 +183,9 @@
     {
       "id": "deepseek-harness",
       "name": "DeepSeek Harness",
-      "description": "CLI chính thức @deepseek-ai/dsh. Cần Node.js 22.19 trở lên hoặc Node 24",
-      "detect": { "type": "command", "command": "dsh" },
-      "install": {
-        "type": "command",
-        "run": "npm install -g @deepseek-ai/dsh; if ($LASTEXITCODE -ne 0) { throw \"npm install @deepseek-ai/dsh failed: $LASTEXITCODE\" }"
-      },
+      "description": "CLI chính thức @deepseek-ai/dsh. Cần Node.js 22.19 trở lên hoặc Node 24. Bật chạy script PowerShell cho user nếu policy đang chặn dsh.ps1",
+      "detect": { "type": "script", "script": "Test-DeepSeekHarness.ps1" },
+      "install": { "type": "script", "script": "Install-DeepSeekHarness.ps1" },
       "dependsOn": ["node"],
       "admin": true
     }

@@ -192,6 +192,9 @@ function Get-SetupCatalog {
         if ($component.PSObject.Properties.Name -contains 'afterInstall' -and $component.afterInstall) {
             Assert-InstallSpec -Spec $component.afterInstall -Label "$($component.id).afterInstall" -AllowFallback $false
         }
+        if ($component.PSObject.Properties.Name -contains 'remove' -and $component.remove) {
+            Assert-RemoveSpec -Spec $component.remove -Label $component.id
+        }
         $deps = @()
         if ($component.dependsOn) { $deps = @($component.dependsOn) }
         foreach ($dep in $deps) {
@@ -222,6 +225,20 @@ function Get-SetupCatalog {
         foreach ($id in $ids) {
             if (-not $byId.ContainsKey($id)) {
                 throw "Profile $($profile.id) tro toi component khong ton tai: $id"
+            }
+        }
+        $action = Get-ProfileAction $profile
+        if ($action -eq 'cleanup') {
+            $level = [string]$profile.cleanupLevel
+            if ($level -ne 'session' -and $level -ne 'all') {
+                throw "Profile $($profile.id) can cleanupLevel session hoac all"
+            }
+            foreach ($id in $ids) {
+                $remove = $null
+                if ($byId[$id].PSObject.Properties.Name -contains 'remove') { $remove = $byId[$id].remove }
+                if (-not $remove) {
+                    throw "Profile $($profile.id) tro toi $id nhung component nay khong co remove"
+                }
             }
         }
         $profiles[$profile.id] = $profile
@@ -363,6 +380,155 @@ function Find-CodeCmd {
         if (Test-Path -LiteralPath $candidate) { return $candidate }
     }
     return $null
+}
+
+function Test-DshInNormalPowerShell {
+    # The runner is started with -ExecutionPolicy Bypass, which exports
+    # PSExecutionPolicyPreference. A terminal the user opens does not have that variable.
+    Remove-Item Env:PSExecutionPolicyPreference -ErrorAction SilentlyContinue
+    $command = @'
+$ErrorActionPreference = 'Stop'
+try {
+    dsh --version | Out-Null
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+} catch {
+    exit 1
+}
+'@
+    $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($command))
+    $stdout = Join-Path $env:TEMP ("dsh-probe-{0}.out" -f [guid]::NewGuid().ToString('N'))
+    $stderr = Join-Path $env:TEMP ("dsh-probe-{0}.err" -f [guid]::NewGuid().ToString('N'))
+    $probe = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" `
+        -ArgumentList "-NoProfile -EncodedCommand $encoded" `
+        -Wait -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+    Remove-Item -LiteralPath $stdout, $stderr -Force -ErrorAction SilentlyContinue
+    return ($probe.ExitCode -eq 0)
+}
+
+function Get-ProfileAction {
+    param($Profile)
+    if ($Profile -and $Profile.PSObject.Properties.Name -contains 'action' -and $Profile.action) {
+        $action = [string]$Profile.action
+        if ($action -ne 'install' -and $action -ne 'cleanup') {
+            throw "Profile $($Profile.id) co action khong ho tro: $action"
+        }
+        return $action
+    }
+    return 'install'
+}
+
+function Assert-RemoveSpec {
+    param($Spec, [string]$Label)
+    $session = @()
+    if ($Spec.session) { $session = @($Spec.session) }
+    foreach ($path in $session) {
+        if (-not $path) { throw "$Label co remove.session rong" }
+    }
+    $packages = @()
+    if ($Spec.package) { $packages = @($Spec.package) }
+    if ($session.Count -eq 0 -and $packages.Count -eq 0) {
+        throw "$Label remove khong co session hoac package"
+    }
+    foreach ($package in $packages) {
+        if ($package.type -eq 'choco' -and $package.package) { continue }
+        if ($package.type -eq 'npm' -and $package.package) { continue }
+        if ($package.type -eq 'path' -and $package.path) { continue }
+        throw "$Label co remove.package khong ho tro"
+    }
+}
+
+function Test-RemovableUserPath {
+    param([string]$Path)
+    if (-not $Path -or $Path -match '[\*\?]') { return $false }
+    $expanded = [Environment]::ExpandEnvironmentVariables($Path)
+    if (-not $expanded) { return $false }
+    $full = [System.IO.Path]::GetFullPath($expanded)
+    $roots = New-Object System.Collections.Generic.List[string]
+    foreach ($root in @($env:USERPROFILE, $env:APPDATA, $env:LOCALAPPDATA)) {
+        if (-not $root) { continue }
+        $roots.Add([System.IO.Path]::GetFullPath($root).TrimEnd('\'))
+    }
+    foreach ($root in $roots) {
+        if ($full.TrimEnd('\') -eq $root) { return $false }
+        if ($full.StartsWith($root + '\', [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
+function Resolve-RemovablePath {
+    param([string]$Path)
+    if (-not (Test-RemovableUserPath $Path)) {
+        throw "Duong dan khong duoc phep xoa: $Path"
+    }
+    return [System.IO.Path]::GetFullPath(([Environment]::ExpandEnvironmentVariables($Path)))
+}
+
+function Get-CleanupSteps {
+    param($Catalog, [string]$ProfileId)
+    if (-not $Catalog.Profiles.ContainsKey($ProfileId)) {
+        throw "Khong co profile '$ProfileId'"
+    }
+    $profile = $Catalog.Profiles[$ProfileId]
+    if ((Get-ProfileAction $profile) -ne 'cleanup') {
+        throw "Profile $ProfileId khong phai lenh xoa"
+    }
+    $level = [string]$profile.cleanupLevel
+    $listed = @($profile.components)
+    $installOrder = @(Get-InstallOrder -ById $Catalog.ById -Ids $listed)
+    $steps = New-Object System.Collections.Generic.List[object]
+    for ($i = $installOrder.Count - 1; $i -ge 0; $i--) {
+        $id = $installOrder[$i]
+        if ($listed -notcontains $id) { continue }
+        $remove = $Catalog.ById[$id].remove
+        if ($level -eq 'session' -or $level -eq 'all') {
+            $session = @()
+            if ($remove.session) { $session = @($remove.session) }
+            foreach ($path in $session) {
+                $full = Resolve-RemovablePath $path
+                $steps.Add([pscustomobject]@{ Id = $id; Kind = 'path'; Target = $full })
+            }
+        }
+        if ($level -eq 'all') {
+            $packages = @()
+            if ($remove.package) { $packages = @($remove.package) }
+            foreach ($package in $packages) {
+                if ($package.type -eq 'path') {
+                    $full = Resolve-RemovablePath $package.path
+                    $steps.Add([pscustomobject]@{ Id = $id; Kind = 'path'; Target = $full })
+                } else {
+                    $steps.Add([pscustomobject]@{ Id = $id; Kind = $package.type; Target = [string]$package.package })
+                }
+            }
+        }
+    }
+    return @($steps)
+}
+
+function Invoke-CleanupStep {
+    param($Step)
+    if ($Step.Kind -eq 'path') {
+        $full = Resolve-RemovablePath $Step.Target
+        if (-not (Test-Path -LiteralPath $full)) {
+            return "Khong co $full"
+        }
+        Remove-Item -LiteralPath $full -Recurse -Force
+        return "Da xoa $full"
+    }
+    if ($Step.Kind -eq 'choco') {
+        & choco uninstall $Step.Target -y --no-progress
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 404) {
+            throw "choco uninstall $($Step.Target) that bai (exit $LASTEXITCODE)"
+        }
+        return "Da go choco $($Step.Target)"
+    }
+    if ($Step.Kind -eq 'npm') {
+        & npm uninstall -g $Step.Target
+        if ($LASTEXITCODE -ne 0) {
+            throw "npm uninstall $($Step.Target) that bai (exit $LASTEXITCODE)"
+        }
+        return "Da go npm $($Step.Target)"
+    }
+    throw "Buoc xoa khong ho tro: $($Step.Kind)"
 }
 
 function Find-DBeaverExe {

@@ -1,0 +1,10 @@
+.env
+logs/
+*.log
+debug_log.txt
+Thumbs.db
+Desktop.ini
+
+# Trinh cai offline de trong vendor/ tren may, khong dua vao git.
+vendor/*
+!vendor/.gitkeep

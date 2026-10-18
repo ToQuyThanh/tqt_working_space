@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "base",
+      "name": "Công cụ cơ bản",
+      "description": "Chocolatey, Git, Python 3.10, uv",
+      "components": ["choco", "git", "python", "uv"]
+    },
+    {
+      "id": "python",
+      "name": "Python",
+      "description": "Python 3.10 và uv",
+      "components": ["choco", "python", "uv"]
+    },
+    {
+      "id": "ide",
+      "name": "IDE",
+      "description": "Bộ cơ bản, VS Code và extension Python",
+      "components": ["choco", "git", "python", "uv", "vscode", "vscode-python"]
+    },
+    {
+      "id": "data",
+      "name": "Cơ sở dữ liệu",
+      "description": "PostgreSQL, Redis, DBeaver",
+      "components": ["choco", "postgres", "redis", "dbeaver"]
+    },
+    {
+      "id": "extras",
+      "name": "Bổ sung",
+      "description": "Rust, Node.js LTS, Firefox, Windows Terminal",
+      "components": ["choco", "rust", "node", "firefox", "windows-terminal"]
+    },
+    {
+      "id": "apps",
+      "name": "Ứng dụng",
+      "description": "Grok Build, Bitwarden, DeepSeek Harness",
+      "components": ["choco", "node", "grok", "bitwarden", "deepseek-harness"]
+    },
+    {
+      "id": "full",
+      "name": "Đầy đủ",
+      "description": "Mọi thành phần trong catalog",
+      "components": [
+        "choco",
+        "git",
+        "python",
+        "uv",
+        "vscode",
+        "vscode-python",
+        "postgres",
+        "redis",
+        "dbeaver",
+        "rust",
+        "node",
+        "firefox",
+        "windows-terminal",
+        "grok",
+        "bitwarden",
+        "deepseek-harness"
+      ]
+    }
+  ]
+}

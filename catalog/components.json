@@ -1,0 +1,196 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "id": "choco",
+      "name": "Chocolatey",
+      "description": "Trình quản lý gói cho Windows",
+      "detect": { "type": "command", "command": "choco" },
+      "install": { "type": "script", "script": "Install-Chocolatey.ps1" },
+      "dependsOn": [],
+      "admin": true
+    },
+    {
+      "id": "git",
+      "name": "Git",
+      "description": "Git",
+      "detect": { "type": "command", "command": "git" },
+      "install": { "type": "choco", "package": "git" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "python",
+      "name": "Python 3.10",
+      "description": "Python 3.10 qua Chocolatey",
+      "detect": { "type": "command", "command": "python" },
+      "install": { "type": "choco", "package": "python310" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "uv",
+      "name": "uv",
+      "description": "Trình cài gói Python. Thử pip, rồi Chocolatey",
+      "detect": { "type": "command", "command": "uv" },
+      "install": {
+        "type": "fallback",
+        "steps": [
+          {
+            "type": "command",
+            "run": "python -m pip install --upgrade pip --quiet; if ($LASTEXITCODE -ne 0) { throw \"pip upgrade failed: $LASTEXITCODE\" }; pip install uv --quiet; if ($LASTEXITCODE -ne 0) { throw \"pip install uv failed: $LASTEXITCODE\" }"
+          },
+          { "type": "choco", "package": "uv" }
+        ]
+      },
+      "dependsOn": ["python"],
+      "admin": true
+    },
+    {
+      "id": "vscode",
+      "name": "Visual Studio Code",
+      "description": "VS Code",
+      "detect": { "type": "script", "script": "Test-VSCode.ps1" },
+      "install": { "type": "choco", "package": "vscode" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "vscode-python",
+      "name": "VS Code Python",
+      "description": "Extension ms-python.python",
+      "detect": { "type": "script", "script": "Test-VSCodePython.ps1" },
+      "install": { "type": "script", "script": "Install-VSCodePython.ps1" },
+      "dependsOn": ["vscode"],
+      "admin": true
+    },
+    {
+      "id": "rust",
+      "name": "Rust",
+      "description": "rustc và cargo",
+      "detect": { "type": "command", "command": "rustc" },
+      "install": { "type": "choco", "package": "rust" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "node",
+      "name": "Node.js LTS",
+      "description": "Node.js LTS",
+      "detect": { "type": "command", "command": "node" },
+      "install": { "type": "choco", "package": "nodejs-lts" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "firefox",
+      "name": "Firefox",
+      "description": "Firefox",
+      "detect": {
+        "type": "path",
+        "paths": [
+          "%ProgramFiles%\\Mozilla Firefox\\firefox.exe",
+          "%ProgramFiles(x86)%\\Mozilla Firefox\\firefox.exe"
+        ]
+      },
+      "install": { "type": "choco", "package": "firefox" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "postgres",
+      "name": "PostgreSQL",
+      "description": "PostgreSQL",
+      "detect": { "type": "script", "script": "Test-Postgres.ps1" },
+      "install": { "type": "choco", "package": "postgresql" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "description": "Redis",
+      "detect": { "type": "script", "script": "Test-Redis.ps1" },
+      "install": { "type": "choco", "package": "redis-64" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "dbeaver",
+      "name": "DBeaver",
+      "description": "DBeaver. Chocolatey, rồi WinGet. Sau đó tạo shortcut Desktop",
+      "detect": { "type": "script", "script": "Test-DBeaver.ps1" },
+      "install": {
+        "type": "fallback",
+        "steps": [
+          { "type": "choco", "package": "dbeaver" },
+          { "type": "winget", "id": "DBeaver.DBeaver" }
+        ]
+      },
+      "afterInstall": { "type": "script", "script": "Install-DBeaverShortcut.ps1" },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "windows-terminal",
+      "name": "Windows Terminal",
+      "description": "Windows Terminal. WinGet, Chocolatey, rồi gói MSIX",
+      "detect": { "type": "script", "script": "Test-WindowsTerminal.ps1" },
+      "install": {
+        "type": "fallback",
+        "steps": [
+          { "type": "winget", "id": "Microsoft.WindowsTerminal" },
+          { "type": "choco", "package": "microsoft-windows-terminal" },
+          { "type": "script", "script": "Install-WindowsTerminal.ps1" }
+        ]
+      },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "grok",
+      "name": "Grok Build",
+      "description": "Grok Build CLI. Đăng nhập trình duyệt khi chạy grok lần đầu, không nằm trong bước cài",
+      "detect": { "type": "path", "paths": ["%USERPROFILE%\\.grok\\bin\\grok.exe"] },
+      "install": {
+        "type": "command",
+        "run": "irm https://x.ai/cli/install.ps1 | iex"
+      },
+      "dependsOn": [],
+      "admin": false
+    },
+    {
+      "id": "bitwarden",
+      "name": "Bitwarden",
+      "description": "Bitwarden desktop. Chocolatey, rồi WinGet",
+      "detect": {
+        "type": "path",
+        "paths": [
+          "%LOCALAPPDATA%\\Programs\\Bitwarden\\Bitwarden.exe",
+          "%ProgramFiles%\\Bitwarden\\Bitwarden.exe"
+        ]
+      },
+      "install": {
+        "type": "fallback",
+        "steps": [
+          { "type": "choco", "package": "bitwarden" },
+          { "type": "winget", "id": "Bitwarden.Bitwarden" }
+        ]
+      },
+      "dependsOn": ["choco"],
+      "admin": true
+    },
+    {
+      "id": "deepseek-harness",
+      "name": "DeepSeek Harness",
+      "description": "CLI chính thức @deepseek-ai/dsh. Cần Node.js 22.19 trở lên hoặc Node 24",
+      "detect": { "type": "command", "command": "dsh" },
+      "install": {
+        "type": "command",
+        "run": "npm install -g @deepseek-ai/dsh; if ($LASTEXITCODE -ne 0) { throw \"npm install @deepseek-ai/dsh failed: $LASTEXITCODE\" }"
+      },
+      "dependsOn": ["node"],
+      "admin": true
+    }
+  ]
+}

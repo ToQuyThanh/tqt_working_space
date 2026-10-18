@@ -15,6 +15,10 @@ param(
 
     [switch]$Help,
 
+    [string]$Cleanup,
+
+    [switch]$Yes,
+
     [string]$ElevatedResult
 )
 
@@ -54,6 +58,10 @@ Cai moi truong may dev.
   setup.bat --component rust,dbeaver
   setup.bat --check          Kiem tra toan bo catalog
   setup.bat --check ide      Kiem tra mot profile
+  setup.bat --cleanup leave-session
+                             Liet ke du lieu se xoa, chua xoa
+  setup.bat --cleanup leave-all --yes
+                             Xoa phien va go goi da khai bao
   setup.bat --list
   setup.bat --help
 
@@ -195,6 +203,46 @@ function Show-AppMenu {
     return (Show-AppMenu $Catalog)
 }
 
+function Show-LeaveMenu {
+    param($Catalog)
+    Write-Host ''
+    Write-Host 'Roi may. Mac dinh chi liet ke, chua xoa.'
+    $index = 1
+    $map = @{}
+    foreach ($profileId in $Catalog.ProfileOrder) {
+        $profile = $Catalog.Profiles[$profileId]
+        if ((Get-ProfileAction $profile) -ne 'cleanup') { continue }
+        Write-Host ("  {0}. {1,-16} {2}" -f $index, $profile.id, $profile.description)
+        $map[[string]$index] = $profile.id
+        $index++
+    }
+    Write-Host '  b. Quay lai'
+    Write-Host '  q. Thoat'
+    $answer = Read-Host 'Chon'
+    $answer = if ($answer) { $answer.Trim() } else { '' }
+    if ($answer -eq '' -or $answer -eq 'b') { return 'back' }
+    if ($answer -eq 'q') { return $null }
+    if ($map.ContainsKey($answer)) {
+        return @{ Cleanup = $map[$answer] }
+    }
+    if ($Catalog.Profiles.ContainsKey($answer)) {
+        $picked = $Catalog.Profiles[$answer]
+        if ((Get-ProfileAction $picked) -eq 'cleanup') {
+            return @{ Cleanup = $answer }
+        }
+    }
+    Write-Setup WARN 'Lua chon khong hop le'
+    return (Show-LeaveMenu $Catalog)
+}
+
+function Format-CleanupPreview {
+    param($Step)
+    if ($Step.Kind -eq 'path') { return "Se xoa $($Step.Target)" }
+    if ($Step.Kind -eq 'choco') { return "Se go choco $($Step.Target)" }
+    if ($Step.Kind -eq 'npm') { return "Se go npm $($Step.Target)" }
+    return "Se xu ly $($Step.Kind) $($Step.Target)"
+}
+
 function Show-SetupMenu {
     param($Catalog)
     Write-Host ''
@@ -205,11 +253,13 @@ function Show-SetupMenu {
     $map = @{}
     foreach ($profileId in $Catalog.ProfileOrder) {
         $profile = $Catalog.Profiles[$profileId]
+        if ((Get-ProfileAction $profile) -eq 'cleanup') { continue }
         Write-Host ("  {0}. {1,-16} {2}" -f $index, $profile.id, $profile.description)
         $map[[string]$index] = $profile.id
         $index++
     }
     Write-Host '  i. Cai mot ung dung (Windows Terminal, Bitwarden, ...)'
+    Write-Host '  r. Roi may (xoa du lieu da khai bao)'
     Write-Host '  c. Kiem tra may (toan bo catalog)'
     Write-Host '  p. Kiem tra mot profile'
     Write-Host '  l. Liet ke catalog'
@@ -221,6 +271,10 @@ function Show-SetupMenu {
         return @{ Profile = $map[$answer]; Component = ''; Check = $false }
     }
     if ($Catalog.Profiles.ContainsKey($answer)) {
+        $picked = $Catalog.Profiles[$answer]
+        if ((Get-ProfileAction $picked) -eq 'cleanup') {
+            return @{ Cleanup = $answer }
+        }
         return @{ Profile = $answer; Component = ''; Check = $false }
     }
     switch ($answer) {
@@ -236,6 +290,11 @@ function Show-SetupMenu {
         }
         'i' {
             $picked = Show-AppMenu $Catalog
+            if ($picked -eq 'back') { return (Show-SetupMenu $Catalog) }
+            return $picked
+        }
+        'r' {
+            $picked = Show-LeaveMenu $Catalog
             if ($picked -eq 'back') { return (Show-SetupMenu $Catalog) }
             return $picked
         }
@@ -263,7 +322,9 @@ try {
         Write-Host 'Profiles:'
         foreach ($profileId in $catalog.ProfileOrder) {
             $profile = $catalog.Profiles[$profileId]
-            Write-Host ("  {0,-18} {1}" -f $profile.id, $profile.name)
+            $profileLabel = $profile.name
+            if ((Get-ProfileAction $profile) -eq 'cleanup') { $profileLabel = "$profileLabel [cleanup]" }
+            Write-Host ("  {0,-18} {1}" -f $profile.id, $profileLabel)
             $memberList = @($profile.components) -join ', '
             Write-Host ("  {0,-18} {1}" -f '', $memberList)
         }
@@ -294,14 +355,83 @@ try {
     $transcriptStarted = $true
     Write-Setup INFO "Log: $logPath"
 
-    if (-not $Profile -and -not $Component -and -not $Check) {
+    $script:CleanupPrompt = $false
+    if (-not $Profile -and -not $Component -and -not $Check -and -not $Cleanup) {
         $choice = Show-SetupMenu $catalog
         if (-not $choice) { exit 0 }
-        $Profile = $choice.Profile
-        $Component = $choice.Component
-        $Check = [bool]$choice.Check
+        if ($choice -is [System.Collections.IDictionary] -and $choice.Contains('Cleanup') -and $choice.Cleanup) {
+            $Cleanup = [string]$choice.Cleanup
+            $script:CleanupPrompt = $true
+        } else {
+            $Profile = $choice.Profile
+            $Component = $choice.Component
+            $Check = [bool]$choice.Check
+        }
     }
 
+    $runInstall = $true
+    if ($Cleanup) {
+        $runInstall = $false
+        if (-not $catalog.Profiles.ContainsKey($Cleanup)) {
+            $known = ($catalog.ProfileOrder -join ', ')
+            throw "Khong co profile '$Cleanup'. Profile hien co: $known"
+        }
+        $steps = @(Get-CleanupSteps -Catalog $catalog -ProfileId $Cleanup)
+        if ($steps.Count -eq 0) {
+            Write-Setup INFO 'Khong co gi de xoa'
+        } else {
+            foreach ($step in $steps) {
+                Write-Setup INFO (Format-CleanupPreview $step)
+            }
+            $apply = [bool]$Yes
+            if (-not $apply -and $script:CleanupPrompt) {
+                $typed = Read-Host 'Go yes de xoa, Enter de huy'
+                if ($typed -and $typed.Trim().ToLowerInvariant() -eq 'yes') { $apply = $true }
+            }
+            if (-not $apply) {
+                Write-Setup INFO 'Chua xoa. Them --yes hoac go yes trong menu de xoa.'
+            } else {
+                $cleanupNeedsAdmin = $false
+                foreach ($step in $steps) {
+                    if ($step.Kind -eq 'choco') { $cleanupNeedsAdmin = $true }
+                }
+                if ($cleanupNeedsAdmin -and -not (Test-IsAdmin)) {
+                    if ($transcriptStarted) {
+                        Stop-Transcript | Out-Null
+                        $transcriptStarted = $false
+                    }
+                    $exitCode = Invoke-Elevated @('-Cleanup', $Cleanup, '-Yes')
+                    exit $exitCode
+                }
+                $pauseOnExit = $true
+                $failedCleanup = New-Object System.Collections.Generic.List[string]
+                foreach ($step in $steps) {
+                    try {
+                        $message = Invoke-CleanupStep $step
+                        Write-Setup OK $message
+                    } catch {
+                        Write-Setup ERROR $_.Exception.Message
+                        $failedCleanup.Add("$($step.Id):$($step.Target)")
+                    }
+                }
+                Write-Host ''
+                if ($failedCleanup.Count -gt 0) {
+                    Write-Setup ERROR ("Loi: {0}" -f ($failedCleanup -join ', '))
+                    $exitCode = 1
+                } else {
+                    Write-Setup OK 'Da xoa xong cac muc da khai bao.'
+                }
+            }
+        }
+    }
+
+    if ($runInstall -and $Profile -and $catalog.Profiles.ContainsKey($Profile)) {
+        if ((Get-ProfileAction $catalog.Profiles[$Profile]) -eq 'cleanup') {
+            throw "Profile $Profile la lenh xoa. Chay setup.bat --cleanup $Profile"
+        }
+    }
+
+    if ($runInstall) {
     $requested = @(Get-RequestedIds $catalog)
     if ($requested.Count -eq 0 -and $Check -and -not $Profile -and -not $Component) {
         $requested = @($catalog.ById.Keys | Sort-Object)
@@ -375,6 +505,7 @@ try {
         } else {
             Write-Setup OK 'Xong. Mo terminal moi de dung PATH vua cai.'
         }
+    }
     }
 } catch {
     Write-Setup ERROR $_.Exception.Message

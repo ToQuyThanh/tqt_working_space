@@ -116,6 +116,39 @@ $help = Invoke-Runner @('-Help')
 Assert-True 'help exits 0' ($help.ExitCode -eq 0) "exit $($help.ExitCode)"
 Assert-True 'help mentions catalog' ($help.Text -match 'catalog') 'help text incomplete'
 Assert-True 'help mentions Windows Terminal' ($help.Text -match 'Windows Terminal') 'help text incomplete'
+Assert-True 'help mentions cleanup' ($help.Text -match 'cleanup') 'help text incomplete'
+
+Assert-True 'profile root is not removable' (-not (Test-RemovableUserPath $env:USERPROFILE)) $env:USERPROFILE
+Assert-True 'Windows directory is not removable' (-not (Test-RemovableUserPath 'C:\Windows')) 'C:\Windows'
+Assert-True 'grok home is removable' (Test-RemovableUserPath '%USERPROFILE%\.grok') '%USERPROFILE%\.grok'
+Assert-True 'leave-session is cleanup' ((Get-ProfileAction $catalog.Profiles['leave-session']) -eq 'cleanup') 'action'
+Assert-True 'base stays an install profile' ((Get-ProfileAction $catalog.Profiles['base']) -eq 'install') 'action'
+
+$leaveSession = @(Get-CleanupSteps -Catalog $catalog -ProfileId 'leave-session')
+$leaveSessionText = ($leaveSession | ForEach-Object { $_.Target }) -join "`n"
+Assert-True 'leave-session lists .dsh' ($leaveSessionText -match '\.dsh') $leaveSessionText
+Assert-True 'leave-session does not uninstall node' ($leaveSessionText -notmatch 'nodejs-lts') $leaveSessionText
+
+$leaveAll = @(Get-CleanupSteps -Catalog $catalog -ProfileId 'leave-all')
+$leaveAllText = ($leaveAll | ForEach-Object { $_.Target }) -join "`n"
+Assert-True 'leave-all lists nodejs-lts' ($leaveAllText -match 'nodejs-lts') $leaveAllText
+
+$dry = Invoke-Runner @('-Cleanup', 'leave-session')
+Assert-True 'cleanup dry-run exits 0' ($dry.ExitCode -eq 0) "exit $($dry.ExitCode)`n$($dry.Text)"
+Assert-True 'cleanup dry-run lists .dsh' ($dry.Text -match '\.dsh') $dry.Text
+Assert-True 'cleanup dry-run does not delete' ($dry.Text -notmatch 'Da xoa') $dry.Text
+Assert-True '.dsh still exists after dry-run' (Test-Path -LiteralPath (Join-Path $env:USERPROFILE '.dsh')) '.dsh missing'
+
+$dryAll = Invoke-Runner @('-Cleanup', 'leave-all')
+Assert-True 'leave-all dry-run exits 0' ($dryAll.ExitCode -eq 0) "exit $($dryAll.ExitCode)"
+Assert-True 'leave-all dry-run mentions nodejs-lts' ($dryAll.Text -match 'nodejs-lts') $dryAll.Text
+Assert-True 'leave-all dry-run does not delete' ($dryAll.Text -notmatch 'Da xoa') $dryAll.Text
+Update-SessionPath
+Assert-True 'node still exists after leave-all dry-run' (Test-CommandInstalled 'node') 'node missing'
+
+$asInstall = Invoke-Runner @('-Profile', 'leave-session')
+Assert-True 'install of cleanup profile exits 1' ($asInstall.ExitCode -eq 1) "exit $($asInstall.ExitCode)"
+Assert-True 'install of cleanup profile points at cleanup' ($asInstall.Text -match 'cleanup') $asInstall.Text
 
 $bad = Invoke-Runner @('-Profile', 'missing-profile')
 Assert-True 'unknown profile exits 1' ($bad.ExitCode -eq 1) "exit $($bad.ExitCode)"

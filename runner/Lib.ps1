@@ -501,7 +501,7 @@ function Get-CleanupSteps {
             }
         }
     }
-    return @($steps)
+    return @($steps.ToArray())
 }
 
 function Invoke-CleanupStep {

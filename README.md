@@ -1,50 +1,39 @@
 # tqt_working_space
 
-Cài môi trường dev trên Windows. Một lối vào: `setup.bat`. Danh sách phần mềm nằm trong `catalog/`. Runner đọc catalog, bỏ qua mục đã có, rồi cài phần còn lại.
+Cài môi trường dev trên Windows. Một lối vào: `setup.bat`. Phần mềm và bộ cài là JSON trong `catalog/`. Markdown chỉ là hướng dẫn. Runner bỏ qua mục đã có, rồi cài phần còn lại. Đăng nhập tài khoản không nằm trong bước cài.
 
 ## Chạy
 
-Mở terminal tại thư mục này. Cài đặt sẽ hỏi quyền Administrator.
-
 ```bat
 setup.bat
-setup.bat ide
-setup.bat --component windows-terminal
-setup.bat --component rust
+setup.bat <profile>
+setup.bat --component <id>
+setup.bat --component <id>,<id>
 setup.bat --check
-setup.bat --check data
+setup.bat --check <profile>
 setup.bat --list
+setup.bat --cleanup <profile>
+setup.bat --cleanup <profile> --yes
 ```
 
-Trong menu, mục `i` liệt kê từng ứng dụng. Chọn một số để cài đúng ứng dụng đó, gồm Windows Terminal (`windows-terminal`).
+Menu:
 
-Mở một terminal mới sau khi cài để dùng PATH vừa cập nhật.
+- Số: cài một profile. Chỉ profile cài (`action` mặc định là `install`).
+- `i`: cài đúng một component, chọn bằng số hoặc id.
+- `r`: rời máy. Chọn profile `cleanup`. Mặc định chỉ in mục sẽ xóa. Gõ `yes` mới xóa.
+- `c`, `p`, `l`: kiểm tra cả máy, kiểm tra một profile, liệt kê catalog.
 
-Kiểm tra code, không cài thêm gì:
+`cleanupLevel` là `session` (xóa đường dẫn phiên) hoặc `all` (xóa phiên, rồi gỡ gói). Không có `--yes` thì `--cleanup` chỉ xem trước. Gọi profile cleanup như một lần cài thì lệnh dừng và chỉ cách dùng `--cleanup`.
+
+Bước cần Administrator thì hỏi UAC. Mở terminal mới sau khi cài để dùng PATH vừa cập nhật.
 
 ```bat
 test.bat
 ```
 
-`test.bat` kết thúc với mã 0 khi catalog và runner đúng. Máy chưa cài hết phần mềm trong catalog vẫn là một lần test đạt.
+`test.bat` phải thoát mã 0. Máy thiếu phần mềm không làm test fail. Dòng `[ERROR]` từ catalog hoặc runner thì fail. Test không gọi `--cleanup ... --yes`.
 
-| Profile | Nội dung |
-|---|---|
-| `base` | Chocolatey, Git, Python 3.10, uv |
-| `python` | Python 3.10, uv |
-| `ide` | `base`, VS Code, extension Python |
-| `data` | PostgreSQL, Redis, DBeaver |
-| `extras` | Rust, Node.js LTS, Firefox, Windows Terminal |
-| `apps` | Grok Build, Bitwarden, DeepSeek Harness |
-| `full` | Mọi mục trong catalog |
-
-## Thêm một phần mềm
-
-Sửa `catalog/components.json` và gắn id vào profile trong `catalog/profiles.json`. Không tạo file `.bat` mới ở thư mục gốc.
-
-Phần lớn gói Chocolatey chỉ cần một object. Script trong `runner/scripts/` chỉ dùng khi phải kiểm tra hoặc cài theo cách riêng (extension VS Code, shortcut DBeaver, gói MSIX).
-
-Chi tiết từng field: [docs/them-thanh-phan.md](docs/them-thanh-phan.md). Hướng dẫn cho agent: [AGENTS.md](AGENTS.md).
+Thêm phần mềm: sửa JSON theo [docs/them-thanh-phan.md](docs/them-thanh-phan.md). Quy tắc cho agent: [AGENTS.md](AGENTS.md).
 
 ## Bố cục
 
@@ -52,38 +41,17 @@ Chi tiết từng field: [docs/them-thanh-phan.md](docs/them-thanh-phan.md). Hư
 setup.bat                 Lối vào
 test.bat                  Kiểm tra catalog và runner
 catalog/components.json   Từng phần mềm
-catalog/profiles.json     Bộ cài
-runner/Setup-Machine.ps1  Menu, thứ tự cài, log
+catalog/profiles.json     Bộ cài và bộ xóa
+runner/Setup-Machine.ps1  Menu, cài, xóa, log
 runner/Lib.ps1            Hàm dùng chung
-runner/scripts/           Script cho mục không cài được chỉ bằng một dòng catalog
+runner/scripts/           Việc một object catalog không diễn tả được
 docs/                     Hướng dẫn
-vendor/                   File cài offline, không commit
-logs/                     Log mỗi lần chạy, không commit
+vendor/                   File cài local, không commit
+logs/                     Không commit
 ```
 
-## Biến môi trường
+Id của từng profile nằm trong `catalog/profiles.json`. `full` gồm mọi component. Profile cleanup không nằm trong `full` và không hiện ở menu số.
 
-Không bắt buộc. Mẫu nằm ở `.env.example`. Copy thành `.env` khi cần đổi thư mục log, tham số Chocolatey, hoặc tắt `pause`. File `.env` không được commit. Repo này không giữ token hay mật khẩu.
+`.env.example` có `SETUP_LOG_DIR`, `CHOCO_EXTRA_ARGS`, `SETUP_NO_PAUSE`. Không ghi token. Biến của tiến trình thắng `.env`.
 
-## File cài offline
-
-`vendor/` đang để trống trong git. Hai bộ cài từng nằm ở thư mục gốc được chuyển vào đây trên máy local, và git bỏ qua file `.exe`:
-
-- `python-3.10.9-amd64.exe`
-- `VSCodeUserSetup-x64-1.106.3.exe`
-
-Catalog hiện cài Python và VS Code bằng Chocolatey, không gọi hai file này.
-
-## Script cũ
-
-| Trước | Nay |
-|---|---|
-| `setup_dev_comp.bat` | `setup.bat base` |
-| `setup_python.bat` | `setup.bat python` |
-| `dev_team_automation/setup_dev_with_IDE.bat` | `setup.bat ide` |
-| `install_vscode.bat` | `setup.bat --component vscode,vscode-python` |
-| `install_dbeaver.bat` | `setup.bat --component dbeaver` |
-| `install_rust.bat` | `setup.bat --component rust` |
-| `install_terminal.bat` | `setup.bat --component windows-terminal` |
-| `eat_choco/install_postgres_redis.bat` | `setup.bat --component postgres,redis` |
-| `eat_choco/software_list.txt` | `node` và `firefox` trong catalog, profile `extras` |
+`vendor/` chỉ giữ bộ cài có sẵn trên máy. Catalog không gọi các file đó. Các file `.bat` cài riêng trước đây đã gộp vào catalog.

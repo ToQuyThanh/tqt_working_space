@@ -59,6 +59,22 @@
         "bitwarden",
         "deepseek-harness"
       ]
+    },
+    {
+      "id": "leave-session",
+      "name": "Rời máy, giữ phần mềm",
+      "description": "Xóa phiên và bí mật đã khai báo. Giữ phần mềm.",
+      "action": "cleanup",
+      "cleanupLevel": "session",
+      "components": ["grok", "deepseek-harness", "bitwarden", "git"]
+    },
+    {
+      "id": "leave-all",
+      "name": "Rời máy, gỡ phần mềm",
+      "description": "Xóa phiên và gỡ các gói đã khai báo.",
+      "action": "cleanup",
+      "cleanupLevel": "all",
+      "components": ["grok", "deepseek-harness", "bitwarden", "git", "node"]
     }
   ]
 }

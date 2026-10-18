@@ -16,6 +16,15 @@
       "description": "Git",
       "detect": { "type": "command", "command": "git" },
       "install": { "type": "choco", "package": "git" },
+      "remove": {
+        "session": [
+          "%USERPROFILE%\\.git-credentials",
+          "%USERPROFILE%\\.ssh"
+        ],
+        "package": [
+          { "type": "choco", "package": "git" }
+        ]
+      },
       "dependsOn": ["choco"],
       "admin": true
     },
@@ -79,6 +88,15 @@
       "description": "Node.js LTS",
       "detect": { "type": "command", "command": "node" },
       "install": { "type": "choco", "package": "nodejs-lts" },
+      "remove": {
+        "session": [
+          "%APPDATA%\\npm",
+          "%APPDATA%\\npm-cache"
+        ],
+        "package": [
+          { "type": "choco", "package": "nodejs-lts" }
+        ]
+      },
       "dependsOn": ["choco"],
       "admin": true
     },
@@ -156,6 +174,19 @@
         "type": "command",
         "run": "irm https://x.ai/cli/install.ps1 | iex"
       },
+      "remove": {
+        "session": [
+          "%USERPROFILE%\\.grok\\auth.json",
+          "%USERPROFILE%\\.grok\\auth.json.lock",
+          "%USERPROFILE%\\.grok\\sessions",
+          "%USERPROFILE%\\.grok\\active_sessions.json",
+          "%USERPROFILE%\\.grok\\active_sessions.lock",
+          "%USERPROFILE%\\.grok\\agent_id"
+        ],
+        "package": [
+          { "type": "path", "path": "%USERPROFILE%\\.grok" }
+        ]
+      },
       "dependsOn": [],
       "admin": false
     },
@@ -177,6 +208,15 @@
           { "type": "winget", "id": "Bitwarden.Bitwarden" }
         ]
       },
+      "remove": {
+        "session": [
+          "%APPDATA%\\Bitwarden"
+        ],
+        "package": [
+          { "type": "choco", "package": "bitwarden" },
+          { "type": "path", "path": "%LOCALAPPDATA%\\Programs\\Bitwarden" }
+        ]
+      },
       "dependsOn": ["choco"],
       "admin": true
     },
@@ -186,6 +226,14 @@
       "description": "CLI chính thức @deepseek-ai/dsh. Cần Node.js 22.19 trở lên hoặc Node 24. Bật chạy script PowerShell cho user nếu policy đang chặn dsh.ps1",
       "detect": { "type": "script", "script": "Test-DeepSeekHarness.ps1" },
       "install": { "type": "script", "script": "Install-DeepSeekHarness.ps1" },
+      "remove": {
+        "session": [
+          "%USERPROFILE%\\.dsh"
+        ],
+        "package": [
+          { "type": "npm", "package": "@deepseek-ai/dsh" }
+        ]
+      },
       "dependsOn": ["node"],
       "admin": true
     }

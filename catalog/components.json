@@ -152,17 +152,17 @@
     {
       "id": "windows-terminal",
       "name": "Windows Terminal",
-      "description": "Windows Terminal. WinGet, Chocolatey, rồi gói MSIX",
+      "description": "Windows Terminal. Menu Explorer: Open in Terminal",
       "detect": { "type": "script", "script": "Test-WindowsTerminal.ps1" },
       "install": {
         "type": "fallback",
         "steps": [
           { "type": "winget", "id": "Microsoft.WindowsTerminal" },
-          { "type": "choco", "package": "microsoft-windows-terminal" },
           { "type": "script", "script": "Install-WindowsTerminal.ps1" }
         ]
       },
-      "dependsOn": ["choco"],
+      "afterInstall": { "type": "script", "script": "Install-WindowsTerminalMenu.ps1" },
+      "dependsOn": [],
       "admin": true
     },
     {
